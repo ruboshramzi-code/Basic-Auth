@@ -105,25 +105,19 @@ def login(event, context):
         }
         RefreshTokenDB.create_token(refresh_token_data)
 
-        # Calculate access token expiration
-        access_expires_at = int(current_timestamp + config.ACCESS_TOKEN_EXPIRY)
-
         # Return unified response with separate user and tokens sections
         return success_response(
             data={
                 'user': {
-                    'user_id': user['user_id'],
+                    'id': user['user_id'],
                     'email': user['email'],
-                    'first_name': user.get('first_name'),
-                    'last_name': user.get('last_name'),
                     'role': user['role']
                 },
                 'tokens': {
                     'access': access_token,
                     'refresh': refresh_token,
                     'type': 'Bearer',
-                    'expires_in': config.ACCESS_TOKEN_EXPIRY,
-                    'expires_at': access_expires_at
+                    'expires_in': config.ACCESS_TOKEN_EXPIRY
                 }
             },
             message="Login successful",
