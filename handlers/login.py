@@ -12,7 +12,7 @@ from utils import (
     generate_access_token,
     generate_refresh_token,
     validate_login_data,
-    success_response,
+    login_success_response,
     error_response,
     validation_error_response
 )
@@ -105,29 +105,12 @@ def login(event, context):
         }
         RefreshTokenDB.create_token(refresh_token_data)
 
-        # Calculate access token expiration
-        access_expires_at = int(current_timestamp + config.ACCESS_TOKEN_EXPIRY)
-
-        # Return unified response with separate user and tokens sections
-        return success_response(
-            data={
-                'user': {
-                    'user_id': user['user_id'],
-                    'email': user['email'],
-                    'first_name': user.get('first_name'),
-                    'last_name': user.get('last_name'),
-                    'role': user['role']
-                },
-                'tokens': {
-                    'access': access_token,
-                    'refresh': refresh_token,
-                    'type': 'Bearer',
-                    'expires_in': config.ACCESS_TOKEN_EXPIRY,
-                    'expires_at': access_expires_at
-                }
-            },
-            message="Login successful",
-            status_code=200
+        # Return login success response
+        return login_success_response(
+            user=user,
+            access_token=access_token,
+            refresh_token=refresh_token,
+            expires_in=config.ACCESS_TOKEN_EXPIRY
         )
         
     except json.JSONDecodeError:
