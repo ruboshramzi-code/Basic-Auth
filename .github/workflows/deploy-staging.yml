@@ -1,0 +1,68 @@
+name: Deploy to Staging
+
+on:
+  push:
+    branches:
+      - staging
+  workflow_dispatch:  # Allow manual trigger
+
+env:
+  AWS_REGION: ${{ secrets.AWS_REGION }}
+  ENVIRONMENT: staging
+
+jobs:
+  deploy:
+    name: Deploy to AWS Staging
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Set up SAM CLI
+        uses: aws-actions/setup-sam@v2
+        with:
+          use-installer: true
+
+      - name: Validate SAM template
+        run: sam validate --lint
+
+      - name: Build SAM application
+        run: sam build --use-container
+
+      - name: Deploy to AWS
+        run: |
+          sam deploy \
+            --config-env staging \
+            --parameter-overrides \
+              Environment=staging \
+              JWTSecret=${{ secrets.JWT_SECRET }} \
+              RefreshTokenSecret=${{ secrets.REFRESH_TOKEN_SECRET }} \
+              MasterSecretKey=${{ secrets.MASTER_SECRET_KEY }} \
+            --no-confirm-changeset \
+            --no-fail-on-empty-changeset
+
+      - name: Get API URL
+        id: get-url
+        run: |
+          API_URL=$(aws cloudformation describe-stacks \
+            --stack-name basic-auth-staging \
+            --query 'Stacks[0].Outputs[?OutputKey==`ApiUrl`].OutputValue' \
+            --output text)
+          echo "API_URL=$API_URL" >> $GITHUB_OUTPUT
+          echo "### Deployment Successful! 🚀" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment:** staging" >> $GITHUB_STEP_SUMMARY
+          echo "**API URL:** $API_URL" >> $GITHUB_STEP_SUMMARY
