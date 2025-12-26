@@ -66,7 +66,32 @@ Before you begin, ensure you have the following installed:
    - IAM permissions to create Lambda functions, API Gateway, and DynamoDB tables
    - Configured AWS credentials
 
-## 🚀 Quick Start
+## 🚀 Deployment Options
+
+Choose your deployment method:
+
+### Option 1: GitHub Actions (Recommended - Zero Setup!) 🎯
+
+**Automatic deployment with GitHub Actions - No local installation needed!**
+
+This is the easiest way to deploy. Just configure secrets on GitHub and push your code!
+
+👉 **[See GitHub Actions Setup Guide](GITHUB_ACTIONS_SETUP.md)** 👈
+
+**Quick summary:**
+1. Create IAM user in AWS
+2. Add 6 secrets to GitHub repository settings
+3. Push to `main` branch → Auto-deploys to dev!
+
+[Full step-by-step guide →](GITHUB_ACTIONS_SETUP.md)
+
+---
+
+### Option 2: Manual Deployment (Local)
+
+Deploy from your local machine using SAM CLI.
+
+## 🚀 Quick Start (Manual Deployment)
 
 ### 1. Clone the Repository
 
