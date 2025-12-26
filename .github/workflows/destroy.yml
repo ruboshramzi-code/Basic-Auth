@@ -1,0 +1,130 @@
+name: Destroy AWS Resources
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to destroy'
+        required: true
+        type: choice
+        options:
+          - dev
+          - staging
+          - prod
+      confirm:
+        description: 'Type "DESTROY" to confirm deletion (ALL DATA WILL BE LOST)'
+        required: true
+        default: ''
+
+env:
+  AWS_REGION: ${{ secrets.AWS_REGION }}
+
+jobs:
+  destroy:
+    name: Destroy ${{ github.event.inputs.environment }} Environment
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment == 'prod' && 'production' || github.event.inputs.environment }}
+
+    steps:
+      - name: Validate confirmation
+        run: |
+          if [ "${{ github.event.inputs.confirm }}" != "DESTROY" ]; then
+            echo "❌ Destruction cancelled - you must type 'DESTROY' to confirm"
+            exit 1
+          fi
+          echo "⚠️  Confirmation received - proceeding with destruction"
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ github.event.inputs.environment == 'prod' && secrets.AWS_ACCESS_KEY_ID_PROD || secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ github.event.inputs.environment == 'prod' && secrets.AWS_SECRET_ACCESS_KEY_PROD || secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Set up SAM CLI
+        uses: aws-actions/setup-sam@v2
+        with:
+          use-installer: true
+
+      - name: Check if stack exists
+        id: check-stack
+        run: |
+          STACK_NAME="basic-auth-${{ github.event.inputs.environment }}"
+          if aws cloudformation describe-stacks --stack-name $STACK_NAME --region ${{ secrets.AWS_REGION }} 2>/dev/null; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "✓ Stack $STACK_NAME exists"
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "⚠️  Stack $STACK_NAME does not exist"
+          fi
+
+      - name: Delete CloudFormation Stack
+        if: steps.check-stack.outputs.exists == 'true'
+        run: |
+          STACK_NAME="basic-auth-${{ github.event.inputs.environment }}"
+          echo "🗑️  Deleting stack: $STACK_NAME"
+          echo "⚠️  This will delete:"
+          echo "   - Lambda function"
+          echo "   - API Gateway"
+          echo "   - All DynamoDB tables and DATA"
+          echo "   - IAM roles"
+          echo ""
+
+          # Delete the stack
+          sam delete \
+            --stack-name $STACK_NAME \
+            --region ${{ secrets.AWS_REGION }} \
+            --no-prompts
+
+          echo "✓ Stack deletion initiated"
+
+      - name: Wait for stack deletion
+        if: steps.check-stack.outputs.exists == 'true'
+        run: |
+          STACK_NAME="basic-auth-${{ github.event.inputs.environment }}"
+          echo "⏳ Waiting for stack deletion to complete..."
+
+          aws cloudformation wait stack-delete-complete \
+            --stack-name $STACK_NAME \
+            --region ${{ secrets.AWS_REGION }} || true
+
+          echo "✓ Stack deletion completed"
+
+      - name: Verify deletion
+        run: |
+          STACK_NAME="basic-auth-${{ github.event.inputs.environment }}"
+
+          if aws cloudformation describe-stacks --stack-name $STACK_NAME --region ${{ secrets.AWS_REGION }} 2>/dev/null; then
+            echo "⚠️  Stack still exists - deletion may have failed"
+            exit 1
+          else
+            echo "✓ Stack successfully deleted"
+            echo ""
+            echo "### ✅ Destruction Complete" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**Environment:** ${{ github.event.inputs.environment }}" >> $GITHUB_STEP_SUMMARY
+            echo "**Stack:** $STACK_NAME" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "All resources have been removed from AWS." >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Clean up S3 bucket (if exists)
+        if: always()
+        run: |
+          # SAM creates a managed S3 bucket for deployments
+          # Try to find and delete it
+          BUCKET_NAME=$(aws s3 ls | grep "aws-sam-cli-managed-default" | awk '{print $3}' || echo "")
+
+          if [ -n "$BUCKET_NAME" ]; then
+            echo "🗑️  Found SAM deployment bucket: $BUCKET_NAME"
+            echo "Emptying bucket..."
+            aws s3 rm s3://$BUCKET_NAME --recursive || true
+            echo "Deleting bucket..."
+            aws s3 rb s3://$BUCKET_NAME || true
+            echo "✓ S3 bucket cleaned up"
+          else
+            echo "No SAM deployment bucket found"
+          fi
