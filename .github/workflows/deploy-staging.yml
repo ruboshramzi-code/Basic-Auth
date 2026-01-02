@@ -5,6 +5,7 @@ on:
 
 env:
   AWS_REGION: ${{ secrets.AWS_REGION }}
+  APP_NAME: ${{ vars.APP_NAME || 'basic-auth' }}  # Default to 'basic-auth' if not set
   ENVIRONMENT: staging
 
 jobs:
@@ -42,12 +43,13 @@ jobs:
       - name: Deploy to AWS
         run: |
           sam deploy \
-            --stack-name basic-auth-staging \
+            --stack-name ${{ env.APP_NAME }}-${{ env.ENVIRONMENT }} \
             --capabilities CAPABILITY_IAM \
             --region ${{ secrets.AWS_REGION }} \
             --resolve-s3 \
             --parameter-overrides \
-              Environment=staging \
+              AppName=${{ env.APP_NAME }} \
+              Environment=${{ env.ENVIRONMENT }} \
               JWTSecret=${{ secrets.JWT_SECRET }} \
               RefreshTokenSecret=${{ secrets.REFRESH_TOKEN_SECRET }} \
               MasterSecretKey=${{ secrets.MASTER_SECRET_KEY }} \
@@ -58,11 +60,13 @@ jobs:
         id: get-url
         run: |
           API_URL=$(aws cloudformation describe-stacks \
-            --stack-name basic-auth-staging \
+            --stack-name ${{ env.APP_NAME }}-${{ env.ENVIRONMENT }} \
             --query 'Stacks[0].Outputs[?OutputKey==`ApiUrl`].OutputValue' \
             --output text)
           echo "API_URL=$API_URL" >> $GITHUB_OUTPUT
           echo "### Deployment Successful! 🚀" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Environment:** staging" >> $GITHUB_STEP_SUMMARY
+          echo "**App Name:** ${{ env.APP_NAME }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment:** ${{ env.ENVIRONMENT }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Stack Name:** ${{ env.APP_NAME }}-${{ env.ENVIRONMENT }}" >> $GITHUB_STEP_SUMMARY
           echo "**API URL:** $API_URL" >> $GITHUB_STEP_SUMMARY
