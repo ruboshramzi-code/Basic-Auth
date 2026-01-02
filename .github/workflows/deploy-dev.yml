@@ -5,6 +5,7 @@ on:
 
 env:
   AWS_REGION: ${{ secrets.AWS_REGION }}
+  APP_NAME: ${{ vars.APP_NAME || 'basic-auth' }}  # Default to 'basic-auth' if not set
   ENVIRONMENT: dev
 
 jobs:
@@ -42,12 +43,13 @@ jobs:
       - name: Deploy to AWS
         run: |
           sam deploy \
-            --stack-name basic-auth-dev \
+            --stack-name ${{ env.APP_NAME }}-${{ env.ENVIRONMENT }} \
             --capabilities CAPABILITY_IAM \
             --region ${{ secrets.AWS_REGION }} \
             --resolve-s3 \
             --parameter-overrides \
-              Environment=dev \
+              AppName=${{ env.APP_NAME }} \
+              Environment=${{ env.ENVIRONMENT }} \
               JWTSecret=${{ secrets.JWT_SECRET }} \
               RefreshTokenSecret=${{ secrets.REFRESH_TOKEN_SECRET }} \
               MasterSecretKey=${{ secrets.MASTER_SECRET_KEY }} \
@@ -58,13 +60,15 @@ jobs:
         id: get-url
         run: |
           API_URL=$(aws cloudformation describe-stacks \
-            --stack-name basic-auth-dev \
+            --stack-name ${{ env.APP_NAME }}-${{ env.ENVIRONMENT }} \
             --query 'Stacks[0].Outputs[?OutputKey==`ApiUrl`].OutputValue' \
             --output text)
           echo "API_URL=$API_URL" >> $GITHUB_OUTPUT
           echo "### Deployment Successful! 🚀" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Environment:** dev" >> $GITHUB_STEP_SUMMARY
+          echo "**App Name:** ${{ env.APP_NAME }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment:** ${{ env.ENVIRONMENT }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Stack Name:** ${{ env.APP_NAME }}-${{ env.ENVIRONMENT }}" >> $GITHUB_STEP_SUMMARY
           echo "**API URL:** $API_URL" >> $GITHUB_STEP_SUMMARY
 
       - name: Comment PR with deployment info
@@ -76,5 +80,5 @@ jobs:
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: `## 🚀 Deployed to Dev\n\n**API URL:** ${{ steps.get-url.outputs.API_URL }}\n\n**Environment:** dev\n**Commit:** ${context.sha.substring(0, 7)}`
+              body: `## 🚀 Deployed to Dev\n\n**App:** ${{ env.APP_NAME }}\n**Environment:** ${{ env.ENVIRONMENT }}\n**Stack:** ${{ env.APP_NAME }}-${{ env.ENVIRONMENT }}\n**API URL:** ${{ steps.get-url.outputs.API_URL }}\n\n**Commit:** ${context.sha.substring(0, 7)}`
             })
